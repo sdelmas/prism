@@ -80,7 +80,7 @@ func RunCompareWithOptions(ctx context.Context, diff string, files []string, mod
 			resp, err := provider.Review(ctx, providers.ReviewRequest{
 				SystemPrompt: sysPr,
 				UserPrompt:   userPr,
-				MaxTokens:    8192,
+				MaxTokens:    maxTokensFor(cfg),
 			})
 			elapsed := time.Since(llmStart).Milliseconds()
 

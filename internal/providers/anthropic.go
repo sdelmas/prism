@@ -32,7 +32,7 @@ func NewAnthropic(model string) (*Anthropic, error) {
 	return &Anthropic{
 		apiKey: key,
 		model:  model,
-		client: &http.Client{Timeout: 120 * time.Second},
+		client: &http.Client{Timeout: requestTimeout(120 * time.Second)},
 	}, nil
 }
 

@@ -36,7 +36,7 @@ func NewOpenAI(model string) (*OpenAI, error) {
 		apiKey:  key,
 		model:   model,
 		baseURL: baseURL,
-		client:  &http.Client{Timeout: 120 * time.Second},
+		client:  &http.Client{Timeout: requestTimeout(120 * time.Second)},
 	}, nil
 }
 

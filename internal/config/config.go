@@ -12,16 +12,25 @@ import (
 
 // Config represents the prism configuration.
 type Config struct {
-	Provider       string        `json:"provider"`
-	Model          string        `json:"model"`
-	Compare        []string      `json:"compare,omitempty"`
-	Format         string        `json:"format"`
-	FailOn         string        `json:"failOn"`
-	MaxFindings    int           `json:"maxFindings"`
-	ContextLines   int           `json:"contextLines"`
-	Include        []string      `json:"include"`
-	Exclude        []string      `json:"exclude"`
-	MaxDiffBytes   int           `json:"maxDiffBytes"`
+	Provider     string   `json:"provider"`
+	Model        string   `json:"model"`
+	Compare      []string `json:"compare,omitempty"`
+	Format       string   `json:"format"`
+	FailOn       string   `json:"failOn"`
+	MaxFindings  int      `json:"maxFindings"`
+	ContextLines int      `json:"contextLines"`
+	Include      []string `json:"include"`
+	Exclude      []string `json:"exclude"`
+	MaxDiffBytes int      `json:"maxDiffBytes"`
+	// ChunkMaxBytes bounds one chunk of a chunked review. It is deliberately
+	// separate from MaxDiffBytes: that value truncates the whole diff before
+	// chunking ever runs, so reusing it here made every diff collapse into a
+	// single chunk and SplitIntoChunks unreachable in practice.
+	ChunkMaxBytes int `json:"chunkMaxBytes,omitempty"`
+	// MaxTokens is the per-request output budget. Reasoning models spend it on
+	// thinking before they answer, so a budget sized for a non-reasoning model
+	// returns an empty completion rather than a short one.
+	MaxTokens      int           `json:"maxTokens,omitempty"`
 	MaxConcurrency int           `json:"maxConcurrency,omitempty"`
 	RateLimitRPM   int           `json:"rateLimitRpm,omitempty"`
 	RulesFile      string        `json:"rulesFile,omitempty"`
@@ -45,15 +54,17 @@ type PrivacyConfig struct {
 // Default returns a Config with all defaults applied.
 func Default() Config {
 	return Config{
-		Provider:     "anthropic",
-		Model:        "claude-sonnet-4-6",
-		Format:       "text",
-		FailOn:       "none",
-		MaxFindings:  50,
-		ContextLines: 3,
-		Include:      []string{"**/*"},
-		Exclude:      []string{"vendor/**", "**/*.gen.go", "**/dist/**"},
-		MaxDiffBytes: 500000,
+		Provider:      "anthropic",
+		Model:         "claude-sonnet-4-6",
+		Format:        "text",
+		FailOn:        "none",
+		MaxFindings:   50,
+		ContextLines:  3,
+		Include:       []string{"**/*"},
+		Exclude:       []string{"vendor/**", "**/*.gen.go", "**/dist/**"},
+		MaxDiffBytes:  500000,
+		ChunkMaxBytes: 20000,
+		MaxTokens:     8192,
 		Cache: CacheConfig{
 			Enabled:    true,
 			TTLSeconds: 86400,
@@ -180,6 +191,12 @@ func mergeFile(dst *Config, src Config) {
 	}
 	if src.MaxDiffBytes > 0 {
 		dst.MaxDiffBytes = src.MaxDiffBytes
+	}
+	if src.ChunkMaxBytes > 0 {
+		dst.ChunkMaxBytes = src.ChunkMaxBytes
+	}
+	if src.MaxTokens > 0 {
+		dst.MaxTokens = src.MaxTokens
 	}
 	if src.MaxConcurrency > 0 {
 		dst.MaxConcurrency = src.MaxConcurrency
@@ -322,6 +339,18 @@ func SetField(cfg *Config, key, value string) error {
 			return fmt.Errorf("maxDiffBytes must be an integer: %w", err)
 		}
 		cfg.MaxDiffBytes = n
+	case "chunkMaxBytes":
+		n, err := strconv.Atoi(value)
+		if err != nil {
+			return fmt.Errorf("chunkMaxBytes must be an integer: %w", err)
+		}
+		cfg.ChunkMaxBytes = n
+	case "maxTokens":
+		n, err := strconv.Atoi(value)
+		if err != nil {
+			return fmt.Errorf("maxTokens must be an integer: %w", err)
+		}
+		cfg.MaxTokens = n
 	case "rulesFile":
 		cfg.RulesFile = value
 	default:

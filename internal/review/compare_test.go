@@ -147,7 +147,7 @@ func TestTitleSimilar(t *testing.T) {
 		{"SQL injection vulnerability", "SQL injection risk", true},
 		{"Missing error handling", "Error handling is absent", true},
 		{"Bug in auth", "Performance issue in database", false},
-		{"", "", true},   // both empty, exact match
+		{"", "", true},    // both empty, exact match
 		{"foo", "", true}, // empty is substring of anything
 	}
 	for _, tt := range tests {

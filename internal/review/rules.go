@@ -9,9 +9,9 @@ import (
 
 // Rules represents a rules pack loaded from --rules.
 type Rules struct {
-	Focus             []string                    `json:"focus,omitempty"`
-	SeverityOverrides map[string]string           `json:"severityOverrides,omitempty"`
-	Required          []RequiredCheck             `json:"required,omitempty"`
+	Focus             []string          `json:"focus,omitempty"`
+	SeverityOverrides map[string]string `json:"severityOverrides,omitempty"`
+	Required          []RequiredCheck   `json:"required,omitempty"`
 }
 
 // RequiredCheck is a policy check that should always be enforced.
@@ -21,9 +21,21 @@ type RequiredCheck struct {
 }
 
 // LoadRules loads a rules file from disk. Returns nil Rules and nil error if path is empty.
+// DefaultRulesPath is the repository-local rules file used when none is named.
+const DefaultRulesPath = ".prism/rules.json"
+
 func LoadRules(path string) (*Rules, error) {
 	if path == "" {
-		return nil, nil
+		// Fall back to the repository-local rules file. Without this, a repo
+		// that ships .prism/rules.json gets none of it -- no focus, no
+		// severityOverrides, none of its required checks -- unless every
+		// invocation remembers --rules. Silence is the worst failure mode
+		// here: the review still runs and still reports findings, so nothing
+		// tells the caller their policy was never applied.
+		if _, err := os.Stat(DefaultRulesPath); err != nil {
+			return nil, nil
+		}
+		path = DefaultRulesPath
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
