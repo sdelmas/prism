@@ -151,7 +151,7 @@ func RunChunkedWithOptions(ctx context.Context, chunks []Chunk, provider provide
 			req := providers.ReviewRequest{
 				SystemPrompt: sysPr,
 				UserPrompt:   userPr,
-				MaxTokens:    8192,
+				MaxTokens:    maxTokensFor(cfg),
 			}
 
 			llmStart := time.Now()
@@ -177,7 +177,7 @@ func RunChunkedWithOptions(ctx context.Context, chunks []Chunk, provider provide
 				resp2, err2 := provider.Review(ctx, providers.ReviewRequest{
 					SystemPrompt: sysPr,
 					UserPrompt:   repairPrompt,
-					MaxTokens:    8192,
+					MaxTokens:    maxTokensFor(cfg),
 				})
 				if err2 != nil {
 					results[i] = result{index: i, err: fmt.Errorf("chunk %d repair: %w", i, err2)}

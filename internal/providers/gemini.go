@@ -32,7 +32,7 @@ func NewGemini(model string) (*Gemini, error) {
 	return &Gemini{
 		apiKey: key,
 		model:  model,
-		client: &http.Client{Timeout: 120 * time.Second},
+		client: &http.Client{Timeout: requestTimeout(120 * time.Second)},
 	}, nil
 }
 

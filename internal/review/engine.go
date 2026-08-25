@@ -99,7 +99,11 @@ func reviewPipeline(ctx context.Context, diff gitctx.DiffResult, cfg config.Conf
 
 		// Use chunked review for large diffs or when always requested (codebase mode)
 		if opts.alwaysChunk || NeedsChunking(redactedDiff) {
-			chunks := SplitIntoChunks(redactedDiff, cfg.MaxDiffBytes)
+			// Chunk on ChunkMaxBytes, not MaxDiffBytes. MaxDiffBytes has already
+			// truncated redactedDiff above, so passing it here made maxBytes >=
+			// len(diff) by construction: every diff became one chunk and the
+			// splitting below never ran.
+			chunks := SplitIntoChunks(redactedDiff, chunkBytesFor(cfg))
 			findings, llmMs, err = RunChunkedWithOptions(ctx, chunks, provider, cfg, rules, ChunkOptions{
 				Builder: opts.builder,
 			})
@@ -117,7 +121,7 @@ func reviewPipeline(ctx context.Context, diff gitctx.DiffResult, cfg config.Conf
 			req := providers.ReviewRequest{
 				SystemPrompt: sysPr,
 				UserPrompt:   userPr,
-				MaxTokens:    8192,
+				MaxTokens:    maxTokensFor(cfg),
 			}
 
 			resp, err := provider.Review(ctx, req)
@@ -136,7 +140,7 @@ func reviewPipeline(ctx context.Context, diff gitctx.DiffResult, cfg config.Conf
 				repairReq := providers.ReviewRequest{
 					SystemPrompt: sysPr,
 					UserPrompt:   repairPrompt,
-					MaxTokens:    8192,
+					MaxTokens:    maxTokensFor(cfg),
 				}
 				resp2, err2 := provider.Review(ctx, repairReq)
 				if err2 != nil {
@@ -504,4 +508,24 @@ func CollectProvenance(findings []Finding) []Provenance {
 
 func emptyReport(diff gitctx.DiffResult, startTime time.Time) *Report {
 	return BuildReport(diff, []Finding{}, 0, time.Since(startTime).Milliseconds())
+}
+
+// maxTokensFor returns the per-request output budget. It falls back to the
+// historical hardcoded 8192 when nothing is configured, so behaviour is
+// unchanged for anyone who never sets it. Reasoning models need considerably
+// more: they spend the budget thinking before they answer, and a budget that
+// runs out mid-thought returns an empty completion, not a short one.
+func maxTokensFor(cfg config.Config) int {
+	if cfg.MaxTokens > 0 {
+		return cfg.MaxTokens
+	}
+	return 8192
+}
+
+// chunkBytesFor returns the per-chunk byte bound, defaulting when unset.
+func chunkBytesFor(cfg config.Config) int {
+	if cfg.ChunkMaxBytes > 0 {
+		return cfg.ChunkMaxBytes
+	}
+	return 20000
 }

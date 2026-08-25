@@ -239,6 +239,12 @@ func buildResult(ctx context.Context, diff, mode, rangeStr string, opts DiffOpti
 	}
 
 	if opts.MaxDiffBytes > 0 && len(diff) > opts.MaxDiffBytes {
+		// Say so out of band as well as in the diff text. The in-band marker
+		// is addressed to the model; a caller reading "Findings: 0" otherwise
+		// has no way to tell a clean review from one that never saw most of
+		// the change.
+		fmt.Fprintf(os.Stderr, "warning: diff truncated from %d to %d bytes by max-diff-bytes; the remainder was not reviewed\n",
+			len(diff), opts.MaxDiffBytes)
 		diff = diff[:opts.MaxDiffBytes] + "\n... (diff truncated at max-diff-bytes limit)\n"
 	}
 

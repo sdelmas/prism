@@ -41,7 +41,7 @@ func NewOllama(model string) (*Ollama, error) {
 		apiKey:  apiKey,
 		model:   model,
 		baseURL: baseURL + "/v1/chat/completions",
-		client:  &http.Client{Timeout: 300 * time.Second},
+		client:  &http.Client{Timeout: requestTimeout(300 * time.Second)},
 	}, nil
 }
 
