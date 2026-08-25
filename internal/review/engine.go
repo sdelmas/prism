@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -173,8 +174,40 @@ func reviewPipeline(ctx context.Context, diff gitctx.DiffResult, cfg config.Conf
 	return BuildReport(diff, findings, llmMs, time.Since(startTime).Milliseconds()), nil
 }
 
+// thinkBlockRe matches <think>...</think> reasoning blocks emitted by
+// reasoning models (e.g. MiniMax M-series). (?is) = case-insensitive, dot
+// matches newlines.
+var thinkBlockRe = regexp.MustCompile(`(?is)<think>.*?</think>`)
+
+// stripReasoning removes reasoning blocks and any prose surrounding the JSON
+// payload that reasoning models emit before/after the findings array.
+func stripReasoning(content string) string {
+	// Remove closed <think>...</think> blocks.
+	content = thinkBlockRe.ReplaceAllString(content, "")
+	// Remove a dangling, unclosed <think> (response truncated inside it).
+	if i := strings.Index(strings.ToLower(content), "<think>"); i != -1 {
+		content = content[:i]
+	}
+	content = strings.TrimSpace(content)
+
+	// After stripping, if the content still isn't a bare JSON array/object,
+	// carve out the outermost array from the first '[' to the last ']'.
+	if !strings.HasPrefix(content, "[") && !strings.HasPrefix(content, "{") && !strings.HasPrefix(content, "```") {
+		if start := strings.Index(content, "["); start != -1 {
+			if end := strings.LastIndex(content, "]"); end > start {
+				content = content[start : end+1]
+			}
+		}
+	}
+	return content
+}
+
 func parseFindings(content string) ([]Finding, error) {
 	content = strings.TrimSpace(content)
+
+	// Reasoning models prefix output with <think>...</think>; strip it (and
+	// any surrounding prose) before attempting to parse JSON.
+	content = stripReasoning(content)
 
 	// Strip markdown code fences if present
 	if strings.HasPrefix(content, "```") {
