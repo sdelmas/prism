@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const version = "0.5.0"
+const version = "0.6.0"
 
 // Exit codes per spec section 6.5
 const (
