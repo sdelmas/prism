@@ -25,7 +25,7 @@ The project follows a diff-centric pipeline:
 2. **Git Context** (`internal/gitctx/`) — Extracts diffs from git for all 5 review modes, applies path include/exclude filters, truncates at max-diff-bytes.
 3. **Secret Redaction** (`internal/redact/`) — Regex-based detection of API keys, JWTs, private keys, AWS patterns, GitHub/Slack/Anthropic/OpenAI tokens. Path-based redaction also supported.
 4. **Review Engine** (`internal/review/`) — Contains core types (Finding, Report, Severity, etc.), prompt assembly, LLM response JSON parsing, one repair pass on invalid response, stable finding ID generation. Automatically chunks large diffs (>100KB) into per-file chunks reviewed in parallel (bounded concurrency of 4), then merges/deduplicates findings. Includes compare mode (`compare.go`) for multi-model review with fuzzy finding matching, and rules pack support (`rules.go`) for severity overrides, focus areas, and required checks.
-5. **Providers** (`internal/providers/`) — Implements `Reviewer` interface for Anthropic, OpenAI, and Google/Gemini. Each with timeouts, retries, and rate-limit backoff via shared `retryWithBackoff`.
+5. **Providers** (`internal/providers/`) — Implements `Reviewer` interface for Anthropic, OpenAI, Google/Gemini, and Ollama/LM Studio (local, `ollama` or `lmstudio`). Each with timeouts, retries, and rate-limit backoff via shared `retryWithBackoff`.
 6. **Output** (`internal/output/`) — Text, JSON, Markdown (PR-comment-friendly with collapsible sections), and SARIF v2.1.0 formatters. All support `--out` file or stdout.
 7. **Config** (`internal/config/`) — Merges config with precedence: CLI flags > env vars > config file > defaults. Supports `config init/set/show`.
 8. **Cache** (`internal/cache/`) — File-based cache with SHA-256 hashed keys, TTL expiration, and stats. Stores redacted review responses only. Cache dir: `$XDG_CACHE_HOME/prism`.
@@ -57,16 +57,23 @@ IDs are stable hashes of `path + title + hunk context` so CI diffs remain consis
 
 Config file location: `$XDG_CONFIG_HOME/prism/config.json`
 
-Environment variables: `PRISM_PROVIDER`, `PRISM_MODEL`, `PRISM_FAIL_ON`, `PRISM_FORMAT`, `PRISM_MAX_FINDINGS`, `PRISM_CONTEXT_LINES`. Provider keys: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`.
+Environment variables: `PRISM_PROVIDER`, `PRISM_MODEL`, `PRISM_FAIL_ON`, `PRISM_FORMAT`, `PRISM_MAX_FINDINGS`, `PRISM_CONTEXT_LINES`. Provider keys: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`. Ollama reads `OLLAMA_HOST` and the optional `PRISM_OLLAMA_API_KEY`.
 
-## Code Quality — REQUIRED
+## Code Quality
 
-**MUST**: After writing or modifying any code, ALWAYS run prism to review changes before presenting results to the user. Use `prism review unstaged` for in-progress work or `prism review staged` if changes are already staged. If any findings are severity **high**, fix them before proceeding. This is not optional — every code change must be reviewed.
+Run a prism review of the branch before you open a pull request:
+
+```bash
+prism review range origin/main..HEAD
+```
+
+Fix findings of severity **high** before you open the pull request.
+Do not run it after every edit. Each run sends the diff to the configured provider, which is usually external.
 
 For security-sensitive changes, use compare mode:
 
 ```bash
-prism review staged --compare openai:gpt-5.2,gemini:gemini-3-flash-preview
+prism review range origin/main..HEAD --compare openai:gpt-5.2,gemini:gemini-3-flash-preview
 ```
 
 ## Design Principles
@@ -77,30 +84,3 @@ prism review staged --compare openai:gpt-5.2,gemini:gemini-3-flash-preview
 - **No live API calls in CI tests**: Use mocked HTTP clients for provider tests
 - **Mocked HTTP tests**: Provider tests use `httptest.NewServer` with a `rewriteTransport` to redirect API calls to local test servers
 - **Cobra CLI**: Uses `github.com/spf13/cobra` — the only external dependency
-
-## Code Search Protocol
-
-Use this decision tree — in order — before reading any source file:
-
-### Structural questions → atlas (always first)
-- "Where is X defined?" → `atlas find symbol X --agent`
-- "What calls X?" → `atlas who-calls X --agent`
-- "What does X call?" → `atlas calls X --agent`
-- "What implements interface X?" → `atlas implementations X --agent`
-- "Which tests cover X?" → `atlas tests-for X --agent`
-- "What routes exist?" → `atlas list routes --agent`
-- "What changed?" → `atlas index --since HEAD~1 && atlas stale --agent`
-
-### Before reading a large file → summarize first
-`atlas summarize file <path> --agent`
-Only read the file directly if the summary is insufficient.
-
-### Content/pattern questions → rg
-- Error strings, log messages, string literals
-- Comments, TODOs, inline notes
-- Non-Go/TS files (YAML, SQL, Markdown)
-- Unstaged files not yet indexed
-
-### Never read source files to answer these questions
-If atlas has the answer, do not use Read or Bash(cat).
-Atlas is authoritative — its index is maintained by a PostToolUse hook on Write/Edit/MultiEdit.
